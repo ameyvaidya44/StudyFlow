@@ -4,6 +4,11 @@ import geminiService from './geminiService.js';
 import { AppError } from '../middleware/errorHandler.js';
 import axios from 'axios';
 
+// Cloud API fallback (Cerebras) - same config as geminiService
+const CLOUD_API = 'https://api.cerebras.ai/v1/chat/completions';
+const CLOUD_API_KEY = 'csk-w52crky53j9th34wdn3948my4tjmy3yvvh5pph8r56d8jf82';
+const CLOUD_MODEL = 'qwen-3-235b-a22b-instruct-2507';
+
 export class FlashcardService {
   async generateFlashcards(userId, contentId, count = 10) {
     const content = await Content.findById(contentId);
@@ -38,8 +43,7 @@ export class FlashcardService {
   }
 
   async generateFlashcardsWithAI(text, count = 10) {
-    try {
-      const prompt = `Generate exactly ${count} flashcards from this text. Each flashcard should have:
+    const prompt = `Generate exactly ${count} flashcards from this text. Each flashcard should have:
 - front: A question or term (concise, clear)
 - back: The answer or definition (detailed but not too long)
 - topic: The main topic this card covers
@@ -50,6 +54,10 @@ Return ONLY a valid JSON array, no other text. Example:
 
 Text: ${text.substring(0, 3000)}`;
 
+    let responseText = '';
+
+    // 1st preference: Local Ollama
+    try {
       const OLLAMA_API = 'http://localhost:11434/api/generate';
       const response = await axios.post(OLLAMA_API, {
         model: 'mistral',
@@ -59,21 +67,52 @@ Text: ${text.substring(0, 3000)}`;
         timeout: 60000
       });
 
-      const responseText = response.data.response || '';
-      
-      // Parse JSON
+      responseText = response.data.response || '';
+    } catch (error) {
+      console.error('❌ Ollama flashcard generation failed:', error.message);
+      console.warn('⚠️ Ollama not available, falling back to Cloud API...');
+
+      // 2nd preference: Cloud API fallback
+      try {
+        console.log('☁️ Calling Cloud API (Cerebras) for flashcards...');
+        const cloudResponse = await axios.post(CLOUD_API, {
+          model: CLOUD_MODEL,
+          messages: [
+            { role: 'system', content: 'You are a flashcard generator. Return ONLY valid JSON arrays.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 4096
+        }, {
+          headers: {
+            'Authorization': `Bearer ${CLOUD_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 60000
+        });
+
+        responseText = cloudResponse.data.choices[0].message.content || '';
+        console.log('✅ Cloud API flashcard response received');
+      } catch (cloudError) {
+        console.error('❌ Cloud API flashcard error:', cloudError.message);
+        throw new Error('Both local Ollama and Cloud API are unavailable for flashcard generation.');
+      }
+    }
+
+    // Parse JSON from whichever source succeeded
+    try {
       let jsonStr = responseText.trim();
       jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      
+
       const startIdx = jsonStr.indexOf('[');
       const endIdx = jsonStr.lastIndexOf(']');
-      
+
       if (startIdx !== -1 && endIdx !== -1) {
         jsonStr = jsonStr.substring(startIdx, endIdx + 1);
         jsonStr = jsonStr.replace(/[\n\r\t]/g, ' ');
         jsonStr = jsonStr.replace(/,\s*]/g, ']');
         jsonStr = jsonStr.replace(/,\s*}/g, '}');
-        
+
         const parsed = JSON.parse(jsonStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(card => ({
@@ -84,46 +123,13 @@ Text: ${text.substring(0, 3000)}`;
           }));
         }
       }
-    } catch (error) {
-      console.error('AI flashcard generation failed:', error.message);
+    } catch (parseError) {
+      console.error('Error parsing flashcard JSON:', parseError.message);
     }
 
-    // Fallback: Generate simple flashcards from text
-    return this.generateFallbackFlashcards(text, count);
+    throw new Error('Failed to parse flashcard response from LLM. Please try again.');
   }
 
-  generateFallbackFlashcards(text, count) {
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 20);
-    const flashcards = [];
-
-    for (let i = 0; i < Math.min(count, sentences.length); i++) {
-      const sentence = sentences[i].trim();
-      const words = sentence.split(' ');
-      
-      if (words.length > 5) {
-        // Create a fill-in-the-blank style flashcard
-        const blankIndex = Math.floor(words.length / 2);
-        const answer = words[blankIndex];
-        words[blankIndex] = '______';
-        
-        flashcards.push({
-          front: `Fill in the blank: ${words.join(' ')}`,
-          back: answer,
-          topic: 'General',
-          difficulty: 'medium'
-        });
-      }
-    }
-
-    return flashcards.length > 0 ? flashcards : [
-      {
-        front: 'What is the main topic of this content?',
-        back: 'Review the material to understand the key concepts',
-        topic: 'General',
-        difficulty: 'easy'
-      }
-    ];
-  }
 
   async getFlashcards(userId, contentId = null) {
     const query = { userId };
