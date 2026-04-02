@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import authRoutes from './routes/auth.js';
 import contentRoutes from './routes/content.js';
@@ -15,8 +14,6 @@ import studySessionRoutes from './routes/studySession.js';
 import searchRoutes from './routes/search.js';
 import profileRoutes from './routes/profile.js';
 import { errorHandler } from './middleware/errorHandler.js';
-
-dotenv.config();
 
 const app = express();
 

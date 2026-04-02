@@ -10,7 +10,15 @@ export class AuthService {
       throw new AppError('Email already registered', 400);
     }
 
-    const user = new User({ name, email, password });
+    // Generate a unique username from name
+    const baseUsername = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+    let username = baseUsername;
+    let suffix = 1;
+    while (await User.findOne({ username })) {
+      username = `${baseUsername}${suffix++}`;
+    }
+
+    const user = new User({ name, email, password, username });
     await user.save();
 
     // Create student profile

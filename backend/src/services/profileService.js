@@ -19,6 +19,19 @@ export const createOrGetProfile = async (userId) => {
     
     if (!profile) {
       const user = await User.findById(userId);
+
+      // Backfill username if missing
+      if (!user.username) {
+        const baseUsername = user.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        let username = baseUsername;
+        let suffix = 1;
+        while (await User.findOne({ username })) {
+          username = `${baseUsername}${suffix++}`;
+        }
+        user.username = username;
+        await user.save();
+      }
+
       profile = new StudentProfile({
         userId,
         name: user.name,
@@ -40,12 +53,31 @@ export const createOrGetProfile = async (userId) => {
 
 export const getProfileByUserId = async (userId) => {
   try {
-    const profile = await StudentProfile.findOne({ userId })
+    let profile = await StudentProfile.findOne({ userId })
       .populate(populateFollowData)
       .populate(populateFollowingData);
     
     if (!profile) {
       return await createOrGetProfile(userId);
+    }
+
+    // Backfill username on existing profiles that are missing it
+    if (!profile.username) {
+      const user = await User.findById(userId);
+      if (user) {
+        if (!user.username) {
+          const baseUsername = user.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+          let username = baseUsername;
+          let suffix = 1;
+          while (await User.findOne({ username })) {
+            username = `${baseUsername}${suffix++}`;
+          }
+          user.username = username;
+          await user.save();
+        }
+        profile.username = user.username;
+        await profile.save();
+      }
     }
     
     return profile;

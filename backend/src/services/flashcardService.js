@@ -6,7 +6,6 @@ import axios from 'axios';
 
 // Cloud API fallback (Cerebras) - same config as geminiService
 const CLOUD_API = 'https://api.cerebras.ai/v1/chat/completions';
-const CLOUD_API_KEY = 'csk-w52crky53j9th34wdn3948my4tjmy3yvvh5pph8r56d8jf82';
 const CLOUD_MODEL = 'qwen-3-235b-a22b-instruct-2507';
 
 export class FlashcardService {
@@ -74,6 +73,7 @@ Text: ${text.substring(0, 3000)}`;
 
       // 2nd preference: Cloud API fallback
       try {
+        const CLOUD_API_KEY = process.env.CEREBRAS_API_KEY;
         console.log('☁️ Calling Cloud API (Cerebras) for flashcards...');
         const cloudResponse = await axios.post(CLOUD_API, {
           model: CLOUD_MODEL,

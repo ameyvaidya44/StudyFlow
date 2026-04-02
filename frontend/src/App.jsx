@@ -16,7 +16,7 @@ import { Flashcards } from './pages/Flashcards';
 import { Pomodoro } from './pages/Pomodoro';
 import { Profile } from './pages/Profile';
 import { 
-  BookOpen, BarChart3, Layers, Clock, Map, TrendingUp, Users, MessageCircle, User, LogOut, Home as HomeIcon
+  BookOpen, BarChart3, Layers, Clock, Map, TrendingUp, Users, MessageCircle, User, LogOut, Home as HomeIcon, Github
 } from 'lucide-react';
 import client from './api/client';
 
@@ -39,7 +39,8 @@ const Layout = ({ children }) => {
     { icon: TrendingUp, label: 'Analytics', path: '/analytics' },
     { icon: Users, label: 'Compare', path: '/compare' },
     { icon: MessageCircle, label: 'Chat with AI', path: '/chatbot' },
-    { icon: User, label: 'My Profile', path: `/profile/${user?.username}` }
+    { icon: Github, label: 'GitHub Repo Chat', path: 'https://repo-assistant-olive.vercel.app/', external: true },
+    { icon: User, label: 'My Profile', path: user?.username ? `/profile/${user.username}` : '/profile' }
   ];
 
   return (
@@ -64,7 +65,7 @@ const Layout = ({ children }) => {
           {navItems.map((item) => (
             <button
               key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => item.external ? window.open(item.path, '_blank') : navigate(item.path)}
               className="w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium text-text-secondary hover:text-text-primary flex items-center gap-3 group"
             >
               <item.icon className="w-5 h-5 group-hover:text-primary transition-colors" />
@@ -224,6 +225,16 @@ function App() {
           element={
             <ProtectedRoute>
               <ChatBot />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Profile />
+              </Layout>
             </ProtectedRoute>
           }
         />

@@ -5,7 +5,6 @@ const OLLAMA_API = 'http://localhost:11434/api/generate';
 
 // Cloud API fallback (Cerebras) - SECONDARY
 const CLOUD_API = 'https://api.cerebras.ai/v1/chat/completions';
-const CLOUD_API_KEY = 'csk-w52crky53j9th34wdn3948my4tjmy3yvvh5pph8r56d8jf82';
 const CLOUD_MODEL = 'qwen-3-235b-a22b-instruct-2507';
 
 /**
@@ -14,6 +13,7 @@ const CLOUD_MODEL = 'qwen-3-235b-a22b-instruct-2507';
  * Returns the assistant's response text.
  */
 async function callCloudAPI(userPrompt, systemPrompt = '') {
+  const CLOUD_API_KEY = process.env.CEREBRAS_API_KEY;
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
