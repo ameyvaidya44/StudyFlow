@@ -29,7 +29,9 @@ async function callCerebras(userPrompt, systemPrompt = '') {
     max_tokens: 4096
   });
 
-  return completion.choices[0].message.content || '';
+  const content = completion.choices[0].message.content || '';
+  // Strip <think>...</think> blocks produced by reasoning models (e.g. gpt-oss-120b)
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
 export class GeminiService {

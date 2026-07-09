@@ -87,7 +87,9 @@ Text: ${text.substring(0, 3000)}`;
           max_tokens: 4096
         });
 
-        responseText = completion.choices[0].message.content || '';
+        responseText = (completion.choices[0].message.content || '')
+          .replace(/<think>[\s\S]*?<\/think>/gi, '')
+          .trim();
         console.log('✅ Cerebras SDK flashcard response received');
       } catch (cloudError) {
         console.error('❌ Cerebras SDK flashcard error:', cloudError.message);
