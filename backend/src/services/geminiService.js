@@ -15,7 +15,7 @@ const CLOUD_MODEL = process.env.CEREBRAS_MODEL || 'gpt-oss-120b';
  * Accepts a user prompt and an optional system prompt.
  * Returns the assistant's response text.
  */
-async function callCloudAPI(userPrompt, systemPrompt = '') {
+async function callCerebras(userPrompt, systemPrompt = '') {
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
@@ -46,30 +46,23 @@ export class GeminiService {
         model: 'mistral',
         prompt: prompts[type],
         stream: false
-      }, {
-        timeout: 30000
-      });
+      }, { timeout: 30000 });
 
       return response.data.response;
     } catch (error) {
-      console.error('❌ Ollama API error:', error.message);
-      console.warn('⚠️ Ollama not available, falling back to Cloud API...');
+      console.error('❌ Ollama error:', error.message);
+      console.warn('⚠️ Ollama not available, falling back to Cerebras...');
     }
 
-    // 2nd preference: Cloud API fallback
+    // 2nd preference: Cerebras fallback
     try {
-      console.log('☁️ Calling Cerebras API as fallback...');
-      const cloudResponse = await callCloudAPI(prompts[type]);
-      console.log('✅ Cerebras API response received');
-      return cloudResponse;
-    } catch (cloudError) {
-      console.error('❌ Cerebras API error:', cloudError);
-      console.error('Error details:', {
-        message: cloudError.message,
-        stack: cloudError.stack,
-        response: cloudError.response?.data
-      });
-      throw new Error('Both local Ollama and Cerebras API are unavailable. Please check your connection.');
+      console.log('☁️ Calling Cerebras...');
+      const completion = await callCerebras(prompts[type]);
+      console.log('✅ Cerebras response received');
+      return completion;
+    } catch (cerebrasError) {
+      console.error('❌ Cerebras error:', cerebrasError.message);
+      throw new Error('Both local Ollama and Cerebras are unavailable. Please check your connection.');
     }
   }
 
@@ -91,48 +84,43 @@ Text: ${text}`;
     try {
       const response = await axios.post(OLLAMA_API, {
         model: 'mistral',
-        prompt: prompt,
+        prompt,
         stream: false
       });
       responseText = response.data.response || '';
     } catch (error) {
-      console.error('❌ Ollama API error:', error.message);
-      console.warn('⚠️ Ollama not available, falling back to Cloud API...');
+      console.error('❌ Ollama error:', error.message);
+      console.warn('⚠️ Ollama not available, falling back to Cerebras...');
 
-      // 2nd preference: Cloud API fallback
+      // 2nd preference: Cerebras fallback
       try {
-        console.log('☁️ Calling Cloud API (Cerebras) as fallback...');
-        responseText = await callCloudAPI(prompt, 'You are a quiz generator. Return ONLY valid JSON arrays.');
-        console.log('✅ Cloud API response received');
-      } catch (cloudError) {
-        console.error('❌ Cloud API error:', cloudError.message);
-        throw new Error('Both local Ollama and Cloud API are unavailable. Please check your connection.');
+        console.log('☁️ Calling Cerebras...');
+        responseText = await callCerebras(prompt, 'You are a quiz generator. Return ONLY valid JSON arrays.');
+        console.log('✅ Cerebras response received');
+      } catch (cerebrasError) {
+        console.error('❌ Cerebras error:', cerebrasError.message);
+        throw new Error('Both local Ollama and Cerebras are unavailable. Please check your connection.');
       }
     }
 
-    // Parse the response from whichever source succeeded
+    // Parse the response
     try {
-      let jsonStr = responseText.trim();
+      let jsonStr = responseText.trim()
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '');
 
-      // Remove markdown code blocks if present
-      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-
-      // Find the JSON array
       const startIdx = jsonStr.indexOf('[');
       const endIdx = jsonStr.lastIndexOf(']');
 
       if (startIdx !== -1 && endIdx !== -1) {
-        jsonStr = jsonStr.substring(startIdx, endIdx + 1);
-
-        // Clean up common JSON issues
-        jsonStr = jsonStr.replace(/[\n\r\t]/g, ' ');
-        jsonStr = jsonStr.replace(/,\s*]/g, ']');
-        jsonStr = jsonStr.replace(/,\s*}/g, '}');
-        jsonStr = jsonStr.replace(/:\s*\[/g, ':[');
+        jsonStr = jsonStr.substring(startIdx, endIdx + 1)
+          .replace(/[\n\r\t]/g, ' ')
+          .replace(/,\s*]/g, ']')
+          .replace(/,\s*}/g, '}')
+          .replace(/:\s*\[/g, ':[');
 
         const parsed = JSON.parse(jsonStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Validate and fix each question
           return parsed.map(q => {
             let options = Array.isArray(q.options) ? q.options : [q.options || ''];
             options = options.map(opt => String(opt).trim());
@@ -144,8 +132,8 @@ Text: ${text}`;
 
             return {
               question: String(q.question || '').trim(),
-              options: options,
-              correctAnswer: correctAnswer,
+              options,
+              correctAnswer,
               explanation: String(q.explanation || '').trim()
             };
           });
@@ -167,37 +155,39 @@ Text: ${text}`;
     try {
       const response = await axios.post(OLLAMA_API, {
         model: 'mistral',
-        prompt: prompt,
+        prompt,
         stream: false
       });
       responseText = response.data.response || '';
     } catch (error) {
-      console.error('❌ Ollama API error:', error.message);
-      console.warn('⚠️ Ollama not available, falling back to Cloud API...');
+      console.error('❌ Ollama error:', error.message);
+      console.warn('⚠️ Ollama not available, falling back to Cerebras...');
 
-      // 2nd preference: Cloud API fallback
+      // 2nd preference: Cerebras fallback
       try {
-        console.log('☁️ Calling Cloud API (Cerebras) as fallback...');
-        responseText = await callCloudAPI(prompt, 'You are a learning advisor. Return ONLY valid JSON arrays.');
-        console.log('✅ Cloud API response received');
-      } catch (cloudError) {
-        console.error('❌ Cloud API error:', cloudError.message);
-        throw new Error('Both local Ollama and Cloud API are unavailable. Please check your connection.');
+        console.log('☁️ Calling Cerebras...');
+        responseText = await callCerebras(prompt, 'You are a learning advisor. Return ONLY valid JSON arrays.');
+        console.log('✅ Cerebras response received');
+      } catch (cerebrasError) {
+        console.error('❌ Cerebras error:', cerebrasError.message);
+        throw new Error('Both local Ollama and Cerebras are unavailable. Please check your connection.');
       }
     }
 
     // Parse the response
     try {
-      let jsonStr = responseText.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      let jsonStr = responseText.trim()
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '');
 
       const startIdx = jsonStr.indexOf('[');
       const endIdx = jsonStr.lastIndexOf(']');
 
       if (startIdx !== -1 && endIdx !== -1) {
-        jsonStr = jsonStr.substring(startIdx, endIdx + 1);
-        jsonStr = jsonStr.replace(/[\n\r\t]/g, ' ');
-        jsonStr = jsonStr.replace(/,\s*]/g, ']');
-        jsonStr = jsonStr.replace(/,\s*}/g, '}');
+        jsonStr = jsonStr.substring(startIdx, endIdx + 1)
+          .replace(/[\n\r\t]/g, ' ')
+          .replace(/,\s*]/g, ']')
+          .replace(/,\s*}/g, '}');
 
         const parsed = JSON.parse(jsonStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -227,37 +217,39 @@ Text: ${text}`;
     try {
       const response = await axios.post(OLLAMA_API, {
         model: 'mistral',
-        prompt: prompt,
+        prompt,
         stream: false
       });
       responseText = response.data.response || '';
     } catch (error) {
-      console.error('❌ Ollama API error:', error.message);
-      console.warn('⚠️ Ollama not available, falling back to Cloud API...');
+      console.error('❌ Ollama error:', error.message);
+      console.warn('⚠️ Ollama not available, falling back to Cerebras...');
 
-      // 2nd preference: Cloud API fallback
+      // 2nd preference: Cerebras fallback
       try {
-        console.log('☁️ Calling Cloud API (Cerebras) as fallback...');
-        responseText = await callCloudAPI(prompt, 'You are a topic extractor. Return ONLY valid JSON arrays of strings.');
-        console.log('✅ Cloud API response received');
-      } catch (cloudError) {
-        console.error('❌ Cloud API error:', cloudError.message);
-        throw new Error('Both local Ollama and Cloud API are unavailable. Please check your connection.');
+        console.log('☁️ Calling Cerebras...');
+        responseText = await callCerebras(prompt, 'You are a topic extractor. Return ONLY valid JSON arrays of strings.');
+        console.log('✅ Cerebras response received');
+      } catch (cerebrasError) {
+        console.error('❌ Cerebras error:', cerebrasError.message);
+        throw new Error('Both local Ollama and Cerebras are unavailable. Please check your connection.');
       }
     }
 
     // Parse the response
     try {
-      let jsonStr = responseText.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      let jsonStr = responseText.trim()
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '');
 
       const startIdx = jsonStr.indexOf('[');
       const endIdx = jsonStr.lastIndexOf(']');
 
       if (startIdx !== -1 && endIdx !== -1) {
-        jsonStr = jsonStr.substring(startIdx, endIdx + 1);
-        jsonStr = jsonStr.replace(/[\n\r\t]/g, ' ');
-        jsonStr = jsonStr.replace(/,\s*]/g, ']');
-        jsonStr = jsonStr.replace(/,\s*}/g, '}');
+        jsonStr = jsonStr.substring(startIdx, endIdx + 1)
+          .replace(/[\n\r\t]/g, ' ')
+          .replace(/,\s*]/g, ']')
+          .replace(/,\s*}/g, '}');
 
         const parsed = JSON.parse(jsonStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -276,29 +268,29 @@ Text: ${text}`;
 
     // 1st preference: Local Ollama
     try {
-      console.log('🔄 Calling Ollama API at', OLLAMA_API);
+      console.log('🔄 Calling Ollama...');
       const response = await axios.post(OLLAMA_API, {
         model: 'mistral',
         prompt: fullPrompt,
         stream: false
       });
 
-      console.log('✅ Ollama API response received');
+      console.log('✅ Ollama response received');
       return response.data.response || '';
     } catch (error) {
-      console.error('❌ Ollama API error:', error.message);
-      console.warn('⚠️ Ollama not available, falling back to Cloud API...');
+      console.error('❌ Ollama error:', error.message);
+      console.warn('⚠️ Ollama not available, falling back to Cerebras...');
     }
 
-    // 2nd preference: Cloud API fallback
+    // 2nd preference: Cerebras fallback
     try {
-      console.log('☁️ Calling Cloud API (Cerebras) as fallback...');
-      const cloudResponse = await callCloudAPI(userPrompt, systemPrompt);
-      console.log('✅ Cloud API response received');
-      return cloudResponse;
-    } catch (cloudError) {
-      console.error('❌ Cloud API error:', cloudError.message);
-      throw new Error('Both local Ollama and Cloud API are unavailable. Please check your connection.');
+      console.log('☁️ Calling Cerebras...');
+      const completion = await callCerebras(userPrompt, systemPrompt);
+      console.log('✅ Cerebras response received');
+      return completion;
+    } catch (cerebrasError) {
+      console.error('❌ Cerebras error:', cerebrasError.message);
+      throw new Error('Both local Ollama and Cerebras are unavailable. Please check your connection.');
     }
   }
 }
