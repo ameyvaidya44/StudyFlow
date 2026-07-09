@@ -1,39 +1,35 @@
 import axios from 'axios';
+import Cerebras from '@cerebras/cerebras_cloud_sdk';
 
 // Ollama API endpoint (runs locally) - PRIMARY
 const OLLAMA_API = 'http://localhost:11434/api/generate';
 
-// Cloud API fallback (Cerebras) - SECONDARY
-const CLOUD_API = 'https://api.cerebras.ai/v1/chat/completions';
-const CLOUD_MODEL = 'qwen-3-235b-a22b-instruct-2507';
+// Cerebras SDK client - SECONDARY
+const cerebrasClient = new Cerebras({
+  apiKey: process.env['CEREBRAS_API_KEY']
+});
+const CLOUD_MODEL = process.env.CEREBRAS_MODEL || 'gpt-oss-120b';
 
 /**
- * Helper: Call the cloud-based Cerebras API as a fallback.
+ * Helper: Call the Cerebras API using the official SDK.
  * Accepts a user prompt and an optional system prompt.
  * Returns the assistant's response text.
  */
 async function callCloudAPI(userPrompt, systemPrompt = '') {
-  const CLOUD_API_KEY = process.env.CEREBRAS_API_KEY;
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
   }
   messages.push({ role: 'user', content: userPrompt });
 
-  const response = await axios.post(CLOUD_API, {
+  const completion = await cerebrasClient.chat.completions.create({
     model: CLOUD_MODEL,
-    messages: messages,
+    messages,
     temperature: 0.7,
     max_tokens: 4096
-  }, {
-    headers: {
-      'Authorization': `Bearer ${CLOUD_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    timeout: 60000 // 60 second timeout for cloud
   });
 
-  return response.data.choices[0].message.content || '';
+  return completion.choices[0].message.content || '';
 }
 
 export class GeminiService {
@@ -62,13 +58,18 @@ export class GeminiService {
 
     // 2nd preference: Cloud API fallback
     try {
-      console.log('☁️ Calling Cloud API (Cerebras) as fallback...');
+      console.log('☁️ Calling Cerebras API as fallback...');
       const cloudResponse = await callCloudAPI(prompts[type]);
-      console.log('✅ Cloud API response received');
+      console.log('✅ Cerebras API response received');
       return cloudResponse;
     } catch (cloudError) {
-      console.error('❌ Cloud API error:', cloudError.message);
-      throw new Error('Both local Ollama and Cloud API are unavailable. Please check your connection.');
+      console.error('❌ Cerebras API error:', cloudError);
+      console.error('Error details:', {
+        message: cloudError.message,
+        stack: cloudError.stack,
+        response: cloudError.response?.data
+      });
+      throw new Error('Both local Ollama and Cerebras API are unavailable. Please check your connection.');
     }
   }
 

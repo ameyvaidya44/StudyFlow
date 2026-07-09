@@ -3,10 +3,13 @@ import Content from '../models/Content.js';
 import geminiService from './geminiService.js';
 import { AppError } from '../middleware/errorHandler.js';
 import axios from 'axios';
+import Cerebras from '@cerebras/cerebras_cloud_sdk';
 
-// Cloud API fallback (Cerebras) - same config as geminiService
-const CLOUD_API = 'https://api.cerebras.ai/v1/chat/completions';
-const CLOUD_MODEL = 'qwen-3-235b-a22b-instruct-2507';
+// Cerebras SDK client - fallback for flashcard generation
+const cerebrasClient = new Cerebras({
+  apiKey: process.env['CEREBRAS_API_KEY']
+});
+const CLOUD_MODEL = process.env.CEREBRAS_MODEL || 'gpt-oss-120b';
 
 export class FlashcardService {
   async generateFlashcards(userId, contentId, count = 10) {
@@ -71,11 +74,10 @@ Text: ${text.substring(0, 3000)}`;
       console.error('❌ Ollama flashcard generation failed:', error.message);
       console.warn('⚠️ Ollama not available, falling back to Cloud API...');
 
-      // 2nd preference: Cloud API fallback
+      // 2nd preference: Cerebras SDK fallback
       try {
-        const CLOUD_API_KEY = process.env.CEREBRAS_API_KEY;
-        console.log('☁️ Calling Cloud API (Cerebras) for flashcards...');
-        const cloudResponse = await axios.post(CLOUD_API, {
+        console.log('☁️ Calling Cerebras SDK for flashcards...');
+        const completion = await cerebrasClient.chat.completions.create({
           model: CLOUD_MODEL,
           messages: [
             { role: 'system', content: 'You are a flashcard generator. Return ONLY valid JSON arrays.' },
@@ -83,19 +85,13 @@ Text: ${text.substring(0, 3000)}`;
           ],
           temperature: 0.7,
           max_tokens: 4096
-        }, {
-          headers: {
-            'Authorization': `Bearer ${CLOUD_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 60000
         });
 
-        responseText = cloudResponse.data.choices[0].message.content || '';
-        console.log('✅ Cloud API flashcard response received');
+        responseText = completion.choices[0].message.content || '';
+        console.log('✅ Cerebras SDK flashcard response received');
       } catch (cloudError) {
-        console.error('❌ Cloud API flashcard error:', cloudError.message);
-        throw new Error('Both local Ollama and Cloud API are unavailable for flashcard generation.');
+        console.error('❌ Cerebras SDK flashcard error:', cloudError.message);
+        throw new Error('Both local Ollama and Cerebras API are unavailable for flashcard generation.');
       }
     }
 
